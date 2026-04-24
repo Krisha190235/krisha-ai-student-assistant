@@ -6,6 +6,7 @@ function App() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("summarize");
   const [response, setResponse] = useState("");
+  const [mcqs, setMcqs] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -36,6 +37,24 @@ function App() {
     },
   ];
 
+  const parseMCQs = (text) => {
+    try {
+      const parsed = JSON.parse(text);
+
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+
+      if (parsed.questions && Array.isArray(parsed.questions)) {
+        return parsed.questions;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const handleSubmit = async () => {
     if (!input.trim()) {
       setError("Please enter some text before generating a response.");
@@ -45,6 +64,7 @@ function App() {
     setLoading(true);
     setError("");
     setResponse("");
+    setMcqs(null);
 
     try {
       const res = await axios.post("http://localhost:5001/api/ai/generate", {
@@ -52,7 +72,19 @@ function App() {
         mode,
       });
 
-      setResponse(res.data.response);
+      const aiText = res.data.response;
+
+      if (mode === "mcq") {
+        const parsedMcqs = parseMCQs(aiText);
+
+        if (parsedMcqs) {
+          setMcqs(parsedMcqs);
+        } else {
+          setResponse(aiText);
+        }
+      } else {
+        setResponse(aiText);
+      }
     } catch (err) {
       setError("Something went wrong. Please check your backend server or API key.");
     } finally {
@@ -61,7 +93,11 @@ function App() {
   };
 
   const copyResponse = () => {
-    navigator.clipboard.writeText(response);
+    if (mcqs) {
+      navigator.clipboard.writeText(JSON.stringify(mcqs, null, 2));
+    } else {
+      navigator.clipboard.writeText(response);
+    }
   };
 
   return (
@@ -83,10 +119,7 @@ function App() {
         <section className="form-section">
           <label>Choose Task Mode</label>
 
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-          >
+          <select value={mode} onChange={(e) => setMode(e.target.value)}>
             <option value="explain">Explain a Concept</option>
             <option value="mcq">Generate MCQs</option>
             <option value="summarize">Summarize Text</option>
@@ -120,7 +153,12 @@ function App() {
             <div
               key={card.key}
               className={mode === card.key ? "feature-card active" : "feature-card"}
-              onClick={() => setMode(card.key)}
+              onClick={() => {
+                setMode(card.key);
+                setResponse("");
+                setMcqs(null);
+                setError("");
+              }}
             >
               <span>{card.icon}</span>
               <h3>{card.title}</h3>
@@ -133,11 +171,11 @@ function App() {
 
         {loading && <div className="loader"></div>}
 
-        {!response && !loading && !error && (
+        {!response && !mcqs && !loading && !error && (
           <p className="empty-state">Your AI response will appear here...</p>
         )}
 
-        {response && (
+        {(response || mcqs) && (
           <section className="response-section">
             <div className="response-header">
               <h2>AI Response</h2>
@@ -147,7 +185,30 @@ function App() {
             </div>
 
             <div className="response-box">
-              <pre>{response}</pre>
+              {mcqs ? (
+                <div className="mcq-container">
+                  {mcqs.map((q, index) => (
+                    <div key={index} className="mcq-card">
+                      <h3>
+                        Q{index + 1}. {q.question}
+                      </h3>
+
+                      <ul>
+                        {q.options?.map((option, optionIndex) => (
+                          <li key={optionIndex}>
+                            <span>{String.fromCharCode(65 + optionIndex)}.</span>{" "}
+                            {option}
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="answer">✅ Answer: {q.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <pre>{response}</pre>
+              )}
             </div>
           </section>
         )}
@@ -156,9 +217,7 @@ function App() {
           AI responses may not always be perfect. Verify important information.
         </p>
 
-        <p className="footer-credit">
-          Built by Krisha Patel • MERN + AI Project
-        </p>
+        <p className="footer-credit">Built by Krisha Patel • MERN + AI Project</p>
       </main>
     </div>
   );

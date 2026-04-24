@@ -6,57 +6,99 @@ const ai = new GoogleGenAI({
 
 function buildPrompt(mode, userInput) {
   if (mode === "explain") {
-    return `You are an experienced university instructor.
+    return `
+You are an experienced university instructor.
 
-Explain the following concept in simple terms.
-Keep it under 150 words.
-If unsure, say you are not certain.
+Explain the concept below in simple, beginner-friendly language.
+Limit response to 150 words.
+If unsure, say "I'm not fully certain about this topic."
 
-Concept: ${userInput}`;
+Concept:
+${userInput}
+`;
   }
 
   if (mode === "mcq") {
-    return `You are an exam generator.
+    return `
+You are an exam question generator.
 
-Generate 3 MCQs in JSON format:
+Generate exactly 3 multiple-choice questions based on the topic.
+
+IMPORTANT RULES:
+- Return ONLY valid JSON
+- Do NOT include markdown (no \`\`\`)
+- Do NOT include explanations outside JSON
+- Keep options short
+
+Format:
 [
   {
-    "question": "",
-    "options": ["", "", "", ""],
-    "answer": ""
+    "question": "Question text",
+    "options": ["A", "B", "C", "D"],
+    "answer": "Correct option"
   }
 ]
 
-Topic: ${userInput}
-
-Rules:
-- Only JSON
-- No extra text`;
+Topic:
+${userInput}
+`;
   }
 
   if (mode === "summarize") {
-    return `Summarize the following text in 3 bullet points.
-If unclear, say so.
+    return `
+Summarize the text into 3 concise bullet points.
+If the text is too short or unclear, say so.
 
-Text: ${userInput}`;
+Text:
+${userInput}
+`;
   }
 
   if (mode === "improve") {
-    return `Improve grammar and clarity without changing meaning.
+    return `
+Improve the grammar, clarity, and readability of the text.
+Do not change the meaning.
 
-Text: ${userInput}`;
+Text:
+${userInput}
+`;
   }
+}
+
+function cleanResponse(text) {
+  if (!text) return "";
+
+  return text
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .trim();
 }
 
 async function generateAIResponse(prompt, mode) {
   const finalPrompt = buildPrompt(mode, prompt);
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
-    contents: finalPrompt,
-  });
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+  ];
 
-  return response.text;
+  for (const modelName of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: finalPrompt,
+      });
+
+      return cleanResponse(response.text);
+    } catch (error) {
+      console.error(`AI Error with ${modelName}:`, error.message);
+    }
+  }
+
+  return "⚠️ AI service is temporarily unavailable. Please try again later.";
 }
 
 module.exports = { generateAIResponse };
